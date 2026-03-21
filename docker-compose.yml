@@ -1,6 +1,3 @@
-version: '3.8'
-
-
 services:
 
   # ── DS_1: ORACLE XE 21c ───────────────────────────────────
@@ -151,8 +148,7 @@ services:
     ports:
       - "8081:8080"
     environment:
-      environment:
-        RHO: "/mclient/connection-string->'mongodb://iis_admin:iis_pass@mongodb:27017/?authSource=admin';/http-listener/host->'0.0.0.0';/mongo/uri->'/';/mongo/secured->false"
+      RHO: "/mclient/connection-string->'mongodb://iis_admin:iis_pass@mongodb:27017/?authSource=admin';/http-listener/host->'0.0.0.0';/mongo/uri->'/';/mongo/secured->false"
 
   # ── DS_6: CASSANDRA 4 ─────────────────────────────────────
   # Wide-column session store. Rows have a native TTL matching
