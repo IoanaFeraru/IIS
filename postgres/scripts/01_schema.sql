@@ -4,7 +4,7 @@
 --
 --  Run as: iis_user, connected to iis_db
 --  How to run:
---    Get-Content postgres\scripts\pg_01_schema.sql | docker exec -i iis-postgres psql -U iis_user -d iis_db
+--    Get-Content postgres\scripts\01_schema.sql | docker exec -i iis-postgres psql -U iis_user -d iis_db
 --
 --  Tables:
 --    marketplace_invoices       (renamed from 'invoices' in original schema)
