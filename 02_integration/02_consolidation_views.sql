@@ -1,7 +1,6 @@
--- Script 05: Consolidation Views
+-- Consolidation Views
 -- Run as: FDBO
 -- Database: XEPDB1
--- Use: Get-Content .\01_scripts\oracle\05_consolidation_views.sql | docker exec -i oracle-xe-21c sqlplus -s FDBO/fdbo_pass@//localhost:1521/XEPDB1
 -- DONT FORGET TO INCLUDE NEO4J!!
 -----------------------------------------------------
 

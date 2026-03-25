@@ -1,6 +1,6 @@
 SET SQLBLANKLINES ON
 SET DEFINE OFF
--- Script 04: Access Views
+-- Access Views
 -- Run as: FDBO
 -- Database: XEPDB1
 -- Purpose:
