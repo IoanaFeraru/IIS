@@ -9,6 +9,128 @@ SET DEFINE OFF
 --   - TimescaleDB via PostgREST
 --   - MongoDB via RestHeart
 --   - Neo4j
+-- LIMIT=1000 is set due to size (used to avoid truncation of responses)
+
+--- ============================================================
+-- Helper functions for large JSON payloads over HTTP
+-- ============================================================
+
+CREATE OR REPLACE FUNCTION FDBO.GET_PG_ORDERS_JSON
+RETURN CLOB
+IS
+    req   UTL_HTTP.req;
+    resp  UTL_HTTP.resp;
+    buf   VARCHAR2(32767);
+    cl    CLOB;
+BEGIN
+    req := UTL_HTTP.begin_request(
+        'http://postgrest-pg:3000/orders?select=id,user_id,invoice_id,status,shipping_country,created_at&limit=1000&order=created_at.desc'
+    );
+
+    resp := UTL_HTTP.get_response(req);
+
+    DBMS_LOB.createtemporary(cl, TRUE);
+
+    LOOP
+        UTL_HTTP.read_text(resp, buf, 32767);
+        DBMS_LOB.writeappend(cl, LENGTH(buf), buf);
+    END LOOP;
+
+EXCEPTION
+    WHEN UTL_HTTP.end_of_body THEN
+        UTL_HTTP.end_response(resp);
+        RETURN cl;
+END;
+/
+SHOW ERRORS;
+
+CREATE OR REPLACE FUNCTION FDBO.GET_PG_ORDER_ITEMS_JSON
+RETURN CLOB
+IS
+    req   UTL_HTTP.req;
+    resp  UTL_HTTP.resp;
+    buf   VARCHAR2(32767);
+    cl    CLOB;
+BEGIN
+    req := UTL_HTTP.begin_request(
+        'http://postgrest-pg:3000/order_items?select=id,order_id,product_id,quantity,unit_price_usd,line_total_usd&limit=1000&order=id.asc'
+    );
+
+    resp := UTL_HTTP.get_response(req);
+
+    DBMS_LOB.createtemporary(cl, TRUE);
+
+    LOOP
+        UTL_HTTP.read_text(resp, buf, 32767);
+        DBMS_LOB.writeappend(cl, LENGTH(buf), buf);
+    END LOOP;
+
+EXCEPTION
+    WHEN UTL_HTTP.end_of_body THEN
+        UTL_HTTP.end_response(resp);
+        RETURN cl;
+END;
+/
+SHOW ERRORS;
+
+CREATE OR REPLACE FUNCTION FDBO.GET_PG_MKT_INVOICES_JSON
+RETURN CLOB
+IS
+    req   UTL_HTTP.req;
+    resp  UTL_HTTP.resp;
+    buf   VARCHAR2(32767);
+    cl    CLOB;
+BEGIN
+    req := UTL_HTTP.begin_request(
+        'http://postgrest-pg:3000/marketplace_invoices?select=id,user_id,status,total_usd,created_at&limit=1000&order=created_at.desc'
+    );
+
+    resp := UTL_HTTP.get_response(req);
+
+    DBMS_LOB.createtemporary(cl, TRUE);
+
+    LOOP
+        UTL_HTTP.read_text(resp, buf, 32767);
+        DBMS_LOB.writeappend(cl, LENGTH(buf), buf);
+    END LOOP;
+
+EXCEPTION
+    WHEN UTL_HTTP.end_of_body THEN
+        UTL_HTTP.end_response(resp);
+        RETURN cl;
+END;
+/
+SHOW ERRORS;
+
+CREATE OR REPLACE FUNCTION FDBO.GET_TS_EVENTS_JSON
+RETURN CLOB
+IS
+    req   UTL_HTTP.req;
+    resp  UTL_HTTP.resp;
+    buf   VARCHAR2(32767);
+    cl    CLOB;
+BEGIN
+    req := UTL_HTTP.begin_request(
+        'http://postgrest-ts:3000/events?select=id,user_id,event_type,product_id,metadata,occurred_at&limit=1000&order=occurred_at.desc'
+    );
+
+    resp := UTL_HTTP.get_response(req);
+
+    DBMS_LOB.createtemporary(cl, TRUE);
+
+    LOOP
+        UTL_HTTP.read_text(resp, buf, 32767);
+        DBMS_LOB.writeappend(cl, LENGTH(buf), buf);
+    END LOOP;
+
+EXCEPTION
+    WHEN UTL_HTTP.end_of_body THEN
+        UTL_HTTP.end_response(resp);
+        RETURN cl;
+END;
+/
+SHOW ERRORS;
+
 
 -- ============================================================
 -- 01. V_PG_ORDERS
@@ -18,9 +140,7 @@ SET DEFINE OFF
 CREATE OR REPLACE VIEW FDBO.V_PG_ORDERS AS
 SELECT jt.*
 FROM (
-    SELECT UTL_HTTP.REQUEST(
-        'http://postgrest-pg:3000/orders?limit=100'
-    ) AS json_data
+    SELECT FDBO.GET_PG_ORDERS_JSON() AS json_data
     FROM dual
 ),
 JSON_TABLE(
@@ -35,6 +155,8 @@ JSON_TABLE(
         created_at       VARCHAR2(50)   PATH '$.created_at'
     )
 ) jt;
+/
+SHOW ERRORS;
 
 
 -- ============================================================
@@ -45,9 +167,7 @@ JSON_TABLE(
 CREATE OR REPLACE VIEW FDBO.V_PG_ORDER_ITEMS AS
 SELECT jt.*
 FROM (
-    SELECT UTL_HTTP.REQUEST(
-        'http://postgrest-pg:3000/order_items?limit=100'
-    ) AS json_data
+    SELECT FDBO.GET_PG_ORDER_ITEMS_JSON() AS json_data
     FROM dual
 ),
 JSON_TABLE(
@@ -62,6 +182,8 @@ JSON_TABLE(
         line_total_usd  NUMBER(10,2)   PATH '$.line_total_usd'
     )
 ) jt;
+/
+SHOW ERRORS;
 
 
 -- ============================================================
@@ -72,9 +194,7 @@ JSON_TABLE(
 CREATE OR REPLACE VIEW FDBO.V_PG_MKT_INVOICES AS
 SELECT jt.*
 FROM (
-    SELECT UTL_HTTP.REQUEST(
-        'http://postgrest-pg:3000/marketplace_invoices?limit=100'
-    ) AS json_data
+    SELECT FDBO.GET_PG_MKT_INVOICES_JSON() AS json_data
     FROM dual
 ),
 JSON_TABLE(
@@ -88,6 +208,8 @@ JSON_TABLE(
         created_at  VARCHAR2(50)   PATH '$.created_at'
     )
 ) jt;
+/
+SHOW ERRORS;
 
 
 -- ============================================================
@@ -98,9 +220,7 @@ JSON_TABLE(
 CREATE OR REPLACE VIEW FDBO.V_TS_EVENTS AS
 SELECT jt.*
 FROM (
-    SELECT UTL_HTTP.REQUEST(
-        'http://postgrest-ts:3000/events?limit=100'
-    ) AS json_data
+    SELECT FDBO.GET_TS_EVENTS_JSON() AS json_data
     FROM dual
 ),
 JSON_TABLE(
@@ -115,6 +235,8 @@ JSON_TABLE(
         occurred_at VARCHAR2(50)   PATH '$.occurred_at'
     )
 ) jt;
+/
+SHOW ERRORS;
 
 -- ============================================================
 -- 05. V_MG_PRODUCTS
