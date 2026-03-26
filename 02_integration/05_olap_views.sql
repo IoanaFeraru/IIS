@@ -1,15 +1,32 @@
+-- ============================================================
+-- OLAP VIEWS
+--
+-- Purpose:
+--   This layer provides analytical views for reporting and business insights.
+--
+-- Description:
+--   OLAP views aggregate and analyze data from fact views and dimension views.
+--   They implement advanced analytical techniques such as:
+--
+--   - GROUP BY ROLLUP / CUBE (multi-dimensional aggregation)
+--   - window functions (cumulative metrics, period comparison)
+--   - derived KPIs (percentages, ratios, retention metrics)
+--
+--   These views are designed to answer business questions such as:
+--   - retention and churn analysis
+--   - engagement vs revenue analysis
+--   - time-based performance trends
+--
+--   OLAP views represent the final analytical layer of the model.
+--
+-- Notes:
+--   - Built on top of fact-like consolidation views (ROLAP approach).
+--   - Use dimension views for descriptive context (e.g. user, tier).
+--   - Results may reflect limited data volume due to upstream access layer constraints.
+-- ============================================================
 SET SQLBLANKLINES ON
 SET DEFINE OFF
--- OLAP Views
--- Notes:
---   Some consolidation views used upstream are limited by the access layer
---   to 10000 rows (especially activity/orders/products coming from REST-based
---   access views). As a result, OLAP outputs built on those sources reflect
---   the current sampled data window rather than full source-system volume.
 
-
-
--- ============================================================
 -- ADINA
 --
 -- Required consolidation views:

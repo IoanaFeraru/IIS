@@ -1,4 +1,30 @@
--- Note:Dimension views help separate descriptive attributes (dimensions) from transactional data (facts)
+-- ============================================================
+-- DIMENSION VIEWS
+--
+-- Purpose:
+--   This layer provides descriptive attributes used to analyze fact data.
+--
+-- Description:
+--   Dimension views (V_DIM_*) expose clean, reusable business attributes
+--   such as user information, time hierarchies, status values, and
+--   subscription tiers.
+--
+--   They are used to:
+--   - group and filter fact data
+--   - provide business context for analytical queries
+--   - support slice-and-dice operations in OLAP
+--
+--   Typical dimensions include:
+--   - user (country, city, status)
+--   - time (year, month, quarter)
+--   - subscription tier
+--   - order, invoice, and subscription status
+--
+-- Notes:
+--   - Dimension views are derived from consolidation views.
+--   - They do not contain measures or aggregations.
+--   - They are designed for reuse across multiple analytical queries.
+-- ============================================================
 
 -- ============================================================
 -- 01. V_DIM_USERS

@@ -1,16 +1,29 @@
+-- ============================================================
+-- ACCESS VIEWS
+--
+-- Purpose:
+--   This layer provides access to external data sources through REST APIs.
+--
+-- Description:
+--   Access views expose data from heterogeneous systems such as:
+--   - PostgreSQL (via PostgREST)
+--   - TimescaleDB (via PostgREST)
+--   - MongoDB (via RestHeart)
+--   - Neo4j (via REST API)
+--
+--   Data is retrieved using HTTP calls (UTL_HTTP) and transformed into
+--   relational format using JSON_TABLE.
+--
+--   These views act as virtual tables over external systems and allow
+--   Oracle to query remote data using standard SQL.
+--
+-- Notes:
+--   - Data volume is limited (e.g. 10000 rows) to avoid large payloads.
+--   - These views are not optimized for heavy analytics.
+--   - They are used only as source inputs for the consolidation layer.
+-- ============================================================
 SET SQLBLANKLINES ON
 SET DEFINE OFF
--- Access Views
--- Run as: FDBO
--- Database: XEPDB1
--- Purpose:
---   Creates Oracle access views over external REST endpoints exposed by:
---   - PostgreSQL via PostgREST
---   - TimescaleDB via PostgREST
---   - MongoDB via RestHeart
---   - Neo4j
--- LIMIT=10000 is set due to size (used to avoid truncation of responses)
-
 --- ============================================================
 -- Helper functions for large JSON payloads over HTTP
 -- ============================================================
