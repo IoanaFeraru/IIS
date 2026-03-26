@@ -9,7 +9,7 @@ SET DEFINE OFF
 --   - TimescaleDB via PostgREST
 --   - MongoDB via RestHeart
 --   - Neo4j
--- LIMIT=1000 is set due to size (used to avoid truncation of responses)
+-- LIMIT=10000 is set due to size (used to avoid truncation of responses)
 
 --- ============================================================
 -- Helper functions for large JSON payloads over HTTP
@@ -24,7 +24,7 @@ IS
     cl    CLOB;
 BEGIN
     req := UTL_HTTP.begin_request(
-        'http://postgrest-pg:3000/orders?select=id,user_id,invoice_id,status,shipping_country,created_at&limit=1000&order=created_at.desc'
+        'http://postgrest-pg:3000/orders?select=id,user_id,invoice_id,status,shipping_country,created_at&limit=10000&order=created_at.desc'
     );
 
     resp := UTL_HTTP.get_response(req);
@@ -53,7 +53,7 @@ IS
     cl    CLOB;
 BEGIN
     req := UTL_HTTP.begin_request(
-        'http://postgrest-pg:3000/order_items?select=id,order_id,product_id,quantity,unit_price_usd,line_total_usd&limit=1000&order=id.asc'
+        'http://postgrest-pg:3000/order_items?select=id,order_id,product_id,quantity,unit_price_usd,line_total_usd&limit=10000&order=id.asc'
     );
 
     resp := UTL_HTTP.get_response(req);
@@ -82,7 +82,7 @@ IS
     cl    CLOB;
 BEGIN
     req := UTL_HTTP.begin_request(
-        'http://postgrest-pg:3000/marketplace_invoices?select=id,user_id,status,total_usd,created_at&limit=1000&order=created_at.desc'
+        'http://postgrest-pg:3000/marketplace_invoices?select=id,user_id,status,total_usd,created_at&limit=10000&order=created_at.desc'
     );
 
     resp := UTL_HTTP.get_response(req);
@@ -111,7 +111,7 @@ IS
     cl    CLOB;
 BEGIN
     req := UTL_HTTP.begin_request(
-        'http://postgrest-ts:3000/events?select=id,user_id,event_type,product_id,metadata,occurred_at&limit=1000&order=occurred_at.desc'
+        'http://postgrest-ts:3000/events?select=id,user_id,event_type,product_id,metadata,occurred_at&limit=10000&order=occurred_at.desc'
     );
 
     resp := UTL_HTTP.get_response(req);
