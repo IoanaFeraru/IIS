@@ -2,6 +2,13 @@
 -- Run as: FDBO
 -- Database: XEPDB1
 -- DONT FORGET TO INCLUDE NEO4J!!
+--IMPORTANT! WHEN TESTING (e.g SELECT COUNT(*) AS cnt FROM) THE FOLLOWING CONSOLIDATION VIEWS WILL RETURN ONLY 10000 BECAUSE THEY ARE LIMITED BY THE ACCESS LAYER:
+--    -V_CONS_PG_ORDERS
+--    -V_CONS_PG_ORDER_ITEMS
+--    -V_CONS_ORDER_TRANSACTIONS
+--    -V_CONS_USER_ORDERS
+--    -V_CONS_PRODUCTS
+--    -V_CONS_USER_ACTIVITY
 -----------------------------------------------------
 
 
@@ -398,5 +405,111 @@ LEFT JOIN FDBO.V_MG_PRODUCTS p
     ON p.id = e.product_id;
 /
 
+-- 16. V_CONS_SUB_COHORT 
+-- Description:
+--   cohort retention / churn by subscription tier.
+-- Can be used for:
+--   - cohort grouping
+--   - retention flags
+--   - churn flags
+--   - days active analysis
+CREATE OR REPLACE VIEW FDBO.V_CONS_SUB_COHORT AS
+SELECT
+    us.user_id,
+    us.user_email,
+    us.user_full_name,
+    us.user_country_code,
+    us.user_city,
+    us.subscription_id,
+    us.tier_id,
+    us.tier_name,
+    us.subscription_status,
+    us.billing_cycle,
+    us.started_at,
+    us.current_period_start,
+    us.current_period_end,
+    us.cancelled_at,
+    us.cancel_reason,
+    us.monthly_price_usd,
+    TRUNC(us.started_at, 'MM') AS cohort_month,
+    CASE
+        WHEN us.cancelled_at IS NOT NULL THEN us.cancelled_at - us.started_at
+        WHEN us.current_period_end IS NOT NULL THEN us.current_period_end - us.started_at
+        ELSE SYSDATE - us.started_at
+    END AS days_active,
+    CASE
+        WHEN NVL(us.cancelled_at, us.current_period_end) >= us.started_at + 30 THEN 1
+        ELSE 0
+    END AS retained_30d,
+    CASE
+        WHEN NVL(us.cancelled_at, us.current_period_end) >= us.started_at + 90 THEN 1
+        ELSE 0
+    END AS retained_90d,
+    CASE
+        WHEN us.cancelled_at IS NOT NULL THEN 1
+        ELSE 0
+    END AS churned_flag
+FROM FDBO.V_CONS_USER_SUBSCRIPTION us;
+/
 
-
+-- 17. V_CONS_USER_ENGAGEMENT_SALES
+-- Description:
+--   Monthly cross-source user engagement and sales view.
+--   Combines Oracle user dimensions, TimescaleDB behavioural activity,
+--   and PostgreSQL transactional order data at user-month level.
+-- Can be used for:
+--   - monthly engagement analysis per user and country
+--   - activity vs sales correlation analysis
+--   - event intensity vs order volume analysis
+--   - cross-source behavioural and commercial reporting
+--   - OLAP preparation for rollup, cube, and window-based aggregations
+CREATE OR REPLACE VIEW FDBO.V_CONS_USER_ENGAGEMENT_SALES AS
+WITH activity_monthly AS (
+    SELECT
+        ua.user_id,
+        ua.user_country_code,
+        TRUNC(CAST(ua.occurred_at AS DATE), 'MM') AS activity_month,
+        COUNT(*) AS total_events,
+        SUM(CASE WHEN ua.event_type = 'page_view' THEN 1 ELSE 0 END) AS page_views,
+        SUM(CASE WHEN ua.event_type = 'product_view' THEN 1 ELSE 0 END) AS product_views,
+        SUM(CASE WHEN ua.event_type = 'search' THEN 1 ELSE 0 END) AS searches,
+        SUM(CASE WHEN ua.event_type = 'add_to_cart' THEN 1 ELSE 0 END) AS add_to_cart_events,
+        SUM(CASE WHEN ua.event_type = 'checkout_start' THEN 1 ELSE 0 END) AS checkout_starts,
+        SUM(CASE WHEN ua.event_type = 'purchase' THEN 1 ELSE 0 END) AS purchase_events
+    FROM FDBO.V_CONS_USER_ACTIVITY ua
+    GROUP BY
+        ua.user_id,
+        ua.user_country_code,
+        TRUNC(CAST(ua.occurred_at AS DATE), 'MM')
+),
+orders_monthly AS (
+    SELECT
+        uo.user_id,
+        TRUNC(CAST(uo.order_created_at AS DATE), 'MM') AS order_month,
+        COUNT(DISTINCT uo.order_id) AS order_count,
+        SUM(NVL(uo.quantity, 0)) AS total_quantity,
+        SUM(NVL(uo.line_total_usd, 0)) AS total_revenue_usd
+    FROM FDBO.V_CONS_USER_ORDERS uo
+    GROUP BY
+        uo.user_id,
+        TRUNC(CAST(uo.order_created_at AS DATE), 'MM')
+)
+SELECT
+    a.user_id,
+    a.user_country_code,
+    a.activity_month,
+    a.total_events,
+    a.page_views,
+    a.product_views,
+    a.searches,
+    a.add_to_cart_events,
+    a.checkout_starts,
+    a.purchase_events,
+    NVL(o.order_count, 0) AS order_count,
+    NVL(o.total_quantity, 0) AS total_quantity,
+    NVL(o.total_revenue_usd, 0) AS total_revenue_usd
+FROM activity_monthly a
+LEFT JOIN orders_monthly o
+    ON o.user_id = a.user_id
+   AND o.order_month >= a.activity_month;
+/
