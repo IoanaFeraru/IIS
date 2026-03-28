@@ -125,7 +125,7 @@ CREATE OR REPLACE VIEW FDBO.V_OLAP_ENGAGEMENT_REVENUE_MONTHLY AS
 WITH activity_monthly AS (
     SELECT
         TRUNC(CAST(ua.occurred_at AS DATE), 'MM')   AS activity_month,
-        ua.user_country_code,                        
+        ua.country_code,                        
         COUNT(*)                                     AS total_events,
         SUM(CASE WHEN ua.event_type = 'page_view'       THEN 1 ELSE 0 END) AS total_page_views,
         SUM(CASE WHEN ua.event_type = 'product_view'    THEN 1 ELSE 0 END) AS total_product_views,
@@ -136,7 +136,7 @@ WITH activity_monthly AS (
     FROM FDBO.V_CONS_USER_ACTIVITY ua
     GROUP BY
         TRUNC(CAST(ua.occurred_at AS DATE), 'MM'),
-        ua.user_country_code
+        ua.country_code
 ),
 orders_monthly AS (
     SELECT
@@ -153,7 +153,7 @@ orders_monthly AS (
 combined AS (
     SELECT
         a.activity_month,
-        a.user_country_code,
+        a.country_code,
         a.total_events,
         a.total_page_views,
         a.total_product_views,
@@ -167,12 +167,12 @@ combined AS (
     FROM activity_monthly a
     LEFT JOIN orders_monthly o
         ON  o.order_month = a.activity_month
-        AND NVL(o.user_country_code, '##NULL##') = NVL(a.user_country_code, '##NULL##')
+        AND NVL(o.user_country_code, '##NULL##') = NVL(a.country_code, '##NULL##')
 ),
 base_rollup AS (
     SELECT
         activity_month,
-        user_country_code,
+        country_code,
         SUM(total_events)           AS total_events,
         SUM(total_page_views)       AS total_page_views,
         SUM(total_product_views)    AS total_product_views,
@@ -184,9 +184,9 @@ base_rollup AS (
         SUM(total_quantity)         AS total_quantity,
         SUM(total_revenue_usd)      AS total_revenue_usd,
         GROUPING(activity_month)    AS grp_month,
-        GROUPING(user_country_code) AS grp_country
+        GROUPING(country_code) AS grp_country
     FROM combined
-    GROUP BY ROLLUP(activity_month, user_country_code)
+    GROUP BY ROLLUP(activity_month, country_code)
 ),
 monthly_totals AS (
     SELECT
@@ -206,11 +206,11 @@ monthly_totals AS (
         ) AS prev_month_revenue_usd
     FROM base_rollup
     WHERE activity_month IS NOT NULL
-      AND user_country_code IS NULL
+      AND country_code IS NULL
 )
 SELECT
     b.activity_month,
-    b.user_country_code,
+    b.country_code,
     b.total_events,
     b.total_page_views,
     b.total_product_views,
@@ -601,3 +601,240 @@ SELECT
     )                                           AS mom_growth_pct
 FROM monthly_billing
 ORDER BY tier_name, billing_month;
+
+
+
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- 7. V_OLAP_FUNNEL_CONVERSION_BY_TIER
+--
+-- Purpose:
+--   Analyzes the customer journey funnel (Awareness -> Consideration -> Conversion)
+--   segmented by subscription tier and product category.
+--   Provides granular conversion rates and purchase rates using multidimensional 
+--   grouping sets for flexible reporting.
+--
+-- OLAP feature: GROUPING SETS (Tier, Stage, Product, Month)
+-- Source views: V_CONS_USER_ACTIVITY, V_CONS_USER_SUBSCRIPTION
+--
+-- Output columns:
+--   tier_name          - User's current subscription level
+--   funnel_stage       - Categorized intent (Awareness/Consideration/Conversion)
+--   product_type       - The type of product interacted with
+--   event_month        - The month the activity occurred
+--   total_events       - Raw count of all activities in that group
+--   unique_users       - Distinct user count (Reach)
+--   purchase_rate_pct   - Percentage of total events that were purchases
+--   conversion_rate_pct - Percentage of events that were "lower-funnel" actions
+-- ============================================================
+-- ============================================================
+-- ============================================================
+CREATE OR REPLACE VIEW FDBO.V_OLAP_FUNNEL_CONVERSION_BY_TIER AS
+WITH funnel_base AS (
+    SELECT
+        ua.id,
+        TRUNC(CAST(ua.occurred_at AS DATE), 'MM') AS event_month,
+        us.tier_name,
+        ua.product_type,
+        ua.event_type,
+        CASE
+            WHEN ua.event_type IN ('page_view','search')
+                THEN 'awareness'
+            WHEN ua.event_type IN ('product_view','add_to_cart')
+                THEN 'consideration'
+            WHEN ua.event_type IN ('checkout_start','purchase')
+                THEN 'conversion'
+            ELSE 'other'
+        END                             AS funnel_stage,
+        CASE
+            WHEN ua.event_type IN (
+                'add_to_cart','checkout_start','purchase'
+            ) THEN 1 ELSE 0
+        END                             AS is_conversion_event,
+        CASE
+            WHEN ua.event_type = 'purchase' THEN 1
+            ELSE 0
+        END                             AS is_purchase
+    FROM FDBO.V_CONS_USER_ACTIVITY ua
+    LEFT JOIN (
+        SELECT user_id, tier_name
+        FROM (
+            SELECT user_id, tier_name,
+                   ROW_NUMBER() OVER (
+                       PARTITION BY user_id
+                       ORDER BY started_at DESC
+                   ) AS rn
+            FROM FDBO.V_CONS_USER_SUBSCRIPTION
+        ) WHERE rn = 1
+    ) us ON us.user_id = ua.id
+)
+SELECT
+    tier_name,
+    funnel_stage,
+    product_type,
+    event_month,
+    COUNT(*)                            AS total_events,
+    SUM(is_conversion_event)            AS conversion_events,
+    SUM(is_purchase)                    AS purchase_events,
+    COUNT(DISTINCT id)             AS unique_users,
+    ROUND(
+        100 * SUM(is_purchase)
+        / NULLIF(COUNT(*), 0), 2
+    )                                   AS purchase_rate_pct,
+    ROUND(
+        100 * SUM(is_conversion_event)
+        / NULLIF(COUNT(*), 0), 2
+    )                                   AS conversion_rate_pct,
+    GROUPING(tier_name)                 AS grp_tier,
+    GROUPING(funnel_stage)              AS grp_funnel,
+    GROUPING(product_type)              AS grp_product_type,
+    GROUPING(event_month)               AS grp_month
+FROM funnel_base
+GROUP BY GROUPING SETS (
+    (tier_name, funnel_stage),
+    (tier_name, funnel_stage, product_type),
+    (tier_name, funnel_stage, event_month),
+    ()
+);
+select * from V_OLAP_FUNNEL_CONVERSION_BY_TIER
+
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- 8. V_OLAP_INVOICE_PAYMENT_BEHAVIOUR
+--
+-- Purpose:
+--   Analyzes subscription invoice payment behavior and financial metrics
+--   segmented by subscription tier, billing cycle, and country.
+--   Provides comprehensive payment performance, discount impact, and
+--   payment speed correlations using multidimensional aggregation.
+--
+-- OLAP feature: CUBE (Tier, Billing Cycle, Country)
+-- Source views: SUBSCRIPTION_INVOICES, SUBSCRIPTIONS, SUBSCRIPTION_TIERS, USERS
+--
+-- Output columns:
+--   tier_name                       - Subscription plan name
+--   billing_cycle                   - Billing frequency (monthly/annual)
+--   country_code                    - User's country code
+--   total_invoices                  - Count of invoices in group
+--   paid_count                      - Number of paid invoices
+--   overdue_count                   - Number of overdue invoices
+--   discounted_count                - Number of invoices with discounts
+--   payment_rate_pct                - Percentage of invoices paid
+--   overdue_rate_pct                - Percentage of invoices overdue
+--   avg_invoice_usd                 - Mean invoice total
+--   median_invoice_usd              - Median invoice total
+--   stddev_invoice_usd              - Standard deviation of invoice totals
+--   p25_invoice_usd                 - 25th percentile invoice total
+--   p75_invoice_usd                 - 75th percentile invoice total
+--   avg_discount_rate_pct           - Mean discount percentage
+--   median_days_to_pay              - Median days from due date to payment
+--   stddev_days_to_pay              - Standard deviation of payment delays
+--   discount_payment_correlation    - Correlation between discount rate and payment
+--   invoice_size_payment_speed_corr - Correlation between invoice size and payment speed
+--   grouping_label                  - Hierarchical grouping level indicator
+-- ============================================================
+-- ============================================================
+-- ============================================================
+CREATE OR REPLACE VIEW FDBO.V_OLAP_INVOICE_PAYMENT_BEHAVIOUR AS
+WITH invoice_base AS (
+    SELECT
+        si.id                               AS invoice_id,
+        si.user_id,
+        st.name                             AS tier_name,
+        s.billing_cycle,
+        u.country_code,
+        si.status                           AS invoice_status,
+        si.total_usd,
+        si.subtotal_usd,
+        si.discount_usd,
+        si.tax_usd,
+        ROUND(
+            si.discount_usd
+            / NULLIF(si.subtotal_usd, 0) * 100, 2
+        )                                   AS discount_rate_pct,
+        CASE
+            WHEN si.paid_at IS NOT NULL
+            THEN CAST(si.paid_at AS DATE)
+               - CAST(si.due_at AS DATE)
+            ELSE NULL
+        END                                 AS days_to_pay,
+        CASE
+            WHEN si.status = 'paid'    THEN 1 ELSE 0
+        END                                 AS is_paid,
+        CASE
+            WHEN si.status = 'overdue' THEN 1 ELSE 0
+        END                                 AS is_overdue,
+        CASE
+            WHEN si.discount_usd > 0   THEN 1 ELSE 0
+        END                                 AS has_discount
+    FROM FDBO.SUBSCRIPTION_INVOICES si
+    JOIN FDBO.SUBSCRIPTIONS s
+        ON s.id = si.subscription_id
+    JOIN FDBO.SUBSCRIPTION_TIERS st
+        ON st.id = s.tier_id
+    JOIN FDBO.USERS u
+        ON u.id = si.user_id
+)
+SELECT
+    tier_name,
+    billing_cycle,
+    country_code,
+    COUNT(invoice_id)                       AS total_invoices,
+    SUM(is_paid)                            AS paid_count,
+    SUM(is_overdue)                         AS overdue_count,
+    SUM(has_discount)                       AS discounted_count,
+    ROUND(
+        100 * SUM(is_paid)
+        / NULLIF(COUNT(invoice_id), 0), 2
+    )                                       AS payment_rate_pct,
+    ROUND(
+        100 * SUM(is_overdue)
+        / NULLIF(COUNT(invoice_id), 0), 2
+    )                                       AS overdue_rate_pct,
+    ROUND(AVG(total_usd), 2)                AS avg_invoice_usd,
+    ROUND(MEDIAN(total_usd), 2)             AS median_invoice_usd,
+    ROUND(STDDEV(total_usd), 2)             AS stddev_invoice_usd,
+    ROUND(
+        PERCENTILE_CONT(0.25) WITHIN GROUP (
+            ORDER BY total_usd
+        ), 2
+    )                                       AS p25_invoice_usd,
+    ROUND(
+        PERCENTILE_CONT(0.75) WITHIN GROUP (
+            ORDER BY total_usd
+        ), 2
+    )                                       AS p75_invoice_usd,
+    ROUND(AVG(discount_rate_pct), 2)        AS avg_discount_rate_pct,
+    ROUND(MEDIAN(days_to_pay), 1)           AS median_days_to_pay,
+    ROUND(STDDEV(days_to_pay), 2)           AS stddev_days_to_pay,
+    ROUND(
+        CORR(discount_rate_pct, is_paid), 4
+    )                                       AS discount_payment_correlation,
+    ROUND(
+        CORR(total_usd, days_to_pay), 4
+    )                                       AS invoice_size_payment_speed_corr,
+    CASE
+        WHEN GROUPING(tier_name) = 1
+         AND GROUPING(billing_cycle) = 1
+         AND GROUPING(country_code) = 1
+            THEN 'Grand Total'
+        WHEN GROUPING(billing_cycle) = 1
+         AND GROUPING(country_code) = 1
+            THEN 'Tier Subtotal'
+        WHEN GROUPING(country_code) = 1
+            THEN 'Tier + Cycle Subtotal'
+        ELSE 'Detail'
+    END                                     AS grouping_label,
+    GROUPING(tier_name)                     AS grp_tier,
+    GROUPING(billing_cycle)                 AS grp_cycle,
+    GROUPING(country_code)                  AS grp_country
+FROM invoice_base
+GROUP BY CUBE(
+    tier_name,
+    billing_cycle,
+    country_code
+);
+
+SELECT * FROM V_OLAP_INVOICE_PAYMENT_BEHAVIOUR

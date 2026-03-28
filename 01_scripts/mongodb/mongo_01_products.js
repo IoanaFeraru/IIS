@@ -10,7 +10,7 @@
 //  --type csv --headerline `
 //  --file /csv/products.csv
 // 2.
-// Get-Content mongodb/scripts/mongo_01_products.js | docker exec -i iis-mongodb mongosh --username iis_admin --password iis_pass --authenticationDatabase admin
+// Get-Content 01_scripts/mongodb/mongo_01_products.js | docker exec -i iis-mongodb mongosh --username iis_admin --password iis_pass --authenticationDatabase admin
 // ============================================================
 
 const db = db.getSiblingDB('iis_db');

@@ -112,20 +112,21 @@ LEFT JOIN FDBO.SUBSCRIPTION_INVOICE_LINES l
 --   - line item reporting
 CREATE OR REPLACE VIEW FDBO.V_CONS_ORDER_TRANSACTIONS AS
 SELECT
-    o.order_id,
+    o.id as order_id ,
     o.user_id,
-    o.marketplace_invoice_id,
-    o.order_status,
+    o.invoice_id,
+    o.status,
     o.shipping_country,
-    o.order_created_at,
-    i.order_item_id,
+    o.created_at,
+    i.id,
     i.product_id,
     i.quantity,
     i.unit_price_usd,
     i.line_total_usd
-FROM FDBO.V_CONS_PG_ORDERS o
-LEFT JOIN FDBO.V_CONS_PG_ORDER_ITEMS i
-    ON i.order_id = o.order_id;
+FROM FDBO.V_PG_ORDERS o
+LEFT JOIN FDBO.V_PG_ORDER_ITEMS i
+    ON i.order_id = o.id;
+
 -- 04. V_CONS_USER_ORDERS
 -- Description:
 --   Oracle users + PostgreSQL transactions.
@@ -169,14 +170,14 @@ LEFT JOIN FDBO.MV_PG_MKT_INVOICES mi
 --   - funnel preparation
 CREATE OR REPLACE VIEW FDBO.V_CONS_USER_ACTIVITY AS
 SELECT
-    u.user_id,
-    u.user_email,
-    u.user_full_name,
-    u.user_country_code,
-    u.user_city,
-    u.user_created_at,
-    u.user_last_login_at,
-    u.user_is_active,
+    u.id,
+    u.email,
+    u.full_name,
+    u.country_code,
+    u.city,
+    u.created_at,
+    u.last_login_at,
+    u.is_active,
     e.id          AS event_id,
     e.event_type  AS event_type,
     e.product_id  AS product_id,
@@ -187,9 +188,9 @@ SELECT
     p.seller_id   AS seller_id,
     p.price_usd   AS product_price_usd,
     p.is_active   AS product_is_active
-FROM FDBO.V_CONS_USERS u
+FROM FDBO.USERS u
 JOIN FDBO.V_TS_EVENTS e
-    ON e.user_id = u.user_id
+    ON e.user_id = u.id
 LEFT JOIN FDBO.V_MG_PRODUCTS p
     ON p.product_id = e.product_id;
 -- 06. V_CONS_SUB_COHORT 
@@ -242,9 +243,9 @@ FROM FDBO.V_CONS_USER_SUBSCRIPTION us;
 CREATE OR REPLACE VIEW FDBO.V_CONS_USER_ENGAGEMENT_SALES AS
 WITH activity_monthly AS (
     SELECT
-        ua.user_id,
-        ua.user_country_code,
-        TRUNC(CAST(ua.occurred_at AS DATE), 'MM')        AS activity_month,
+        ua.id                                           AS user_id,
+        ua.country_code                                 AS user_country_code,
+        TRUNC(CAST(ua.occurred_at AS DATE), 'MM')       AS activity_month,
         COUNT(*)                                        AS total_events,
         SUM(CASE WHEN ua.event_type = 'page_view'      THEN 1 ELSE 0 END) AS page_views,
         SUM(CASE WHEN ua.event_type = 'product_view'   THEN 1 ELSE 0 END) AS product_views,
@@ -254,8 +255,8 @@ WITH activity_monthly AS (
         SUM(CASE WHEN ua.event_type = 'purchase'       THEN 1 ELSE 0 END) AS purchase_events
     FROM FDBO.V_CONS_USER_ACTIVITY ua
     GROUP BY
-        ua.user_id,
-        ua.user_country_code,
+        ua.id,
+        ua.country_code,
         TRUNC(CAST(ua.occurred_at AS DATE), 'MM')
 ),
 orders_monthly AS (

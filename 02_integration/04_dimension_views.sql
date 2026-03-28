@@ -39,13 +39,13 @@ SELECT DISTINCT
     TO_CHAR(dt, 'MON') AS month_name,
     TO_CHAR(dt, 'Q') AS quarter_no
 FROM (
-    SELECT CAST(user_created_at AS DATE) AS dt FROM FDBO.V_CONS_USERS
+    SELECT CAST(created_at AS DATE) AS dt FROM FDBO.USERS
     UNION
-    SELECT CAST(started_at AS DATE) AS dt FROM FDBO.V_CONS_SUBSCRIPTIONS
+    SELECT CAST(started_at AS DATE) AS dt FROM FDBO.SUBSCRIPTIONS
     UNION
-    SELECT CAST(invoice_created_at AS DATE) AS dt FROM FDBO.V_CONS_SUB_INVOICES
+    SELECT CAST(created_at AS DATE) AS dt FROM FDBO.SUBSCRIPTION_INVOICES
     UNION
-    SELECT CAST(order_created_at AS DATE) AS dt FROM FDBO.V_CONS_PG_ORDERS
+    SELECT CAST(created_at AS DATE) AS dt FROM FDBO.V_PG_ORDERS
 );
 -- ============================================================
 -- 2. V_DIM_PRODUCT

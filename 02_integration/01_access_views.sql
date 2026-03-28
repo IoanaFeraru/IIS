@@ -523,6 +523,57 @@ CREATE INDEX IDX_MV_SELLER_ID ON FDBO.MV_MG_PRODUCTS(seller_id);
 -- Source:
 -- Neo4j -- Products bought together
 -- ============================================================
+
+
+CREATE OR REPLACE FUNCTION FDBO.query_neo4j_rest_graph_data(
+        REST_URL VARCHAR2,
+        CYPHER_QUERY VARCHAR2,
+        USER_NAME VARCHAR2,
+        PASS VARCHAR2
+)
+RETURN CLOB IS
+    l_req        UTL_HTTP.REQ;
+    l_resp       UTL_HTTP.RESP;
+    l_chunk      VARCHAR2(32767);
+    l_result     CLOB;
+    l_userpass   VARCHAR2(2000) := USER_NAME || ':' || PASS;
+    l_statement  VARCHAR2(32767) :=
+            '{ "statement": "' || REPLACE(CYPHER_QUERY, '"', '\\"') || '" }';
+BEGIN
+    l_req := UTL_HTTP.BEGIN_REQUEST(REST_URL, 'POST');
+    UTL_HTTP.SET_HEADER(l_req, 'Content-type', 'application/json');
+    UTL_HTTP.SET_HEADER(l_req, 'Content-Length', LENGTHB(l_statement));
+    UTL_HTTP.SET_BODY_CHARSET(l_req, 'UTF-8');
+    UTL_HTTP.SET_HEADER(
+        l_req,
+        'Authorization',
+        'Basic ' || UTL_RAW.CAST_TO_VARCHAR2(
+            UTL_ENCODE.BASE64_ENCODE(UTL_I18N.STRING_TO_RAW(l_userpass, 'AL32UTF8'))
+        )
+    );
+
+    UTL_HTTP.WRITE_TEXT(l_req, l_statement);
+    l_resp := UTL_HTTP.GET_RESPONSE(l_req);
+
+    DBMS_LOB.CREATETEMPORARY(l_result, TRUE);
+
+    BEGIN
+        LOOP
+            UTL_HTTP.READ_TEXT(l_resp, l_chunk, 32767);
+            DBMS_LOB.WRITEAPPEND(l_result, LENGTH(l_chunk), l_chunk);
+        END LOOP;
+    EXCEPTION
+        WHEN UTL_HTTP.END_OF_BODY THEN
+            NULL;
+    END;
+
+    UTL_HTTP.END_RESPONSE(l_resp);
+    RETURN l_result;
+END;
+/
+SHOW ERRORS;
+
+
 CREATE OR REPLACE VIEW V_NEO4J_BOUGHT_WITH AS
 WITH json AS (
     SELECT query_neo4j_rest_graph_data(
