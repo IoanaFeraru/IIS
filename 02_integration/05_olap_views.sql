@@ -229,14 +229,160 @@ SELECT
 FROM base_rollup b
 LEFT JOIN monthly_totals m
     ON m.activity_month = b.activity_month;
+--================================================================
+--================================================================
+-- ============================================================
+-- 3 : Subscription Revenue Breakdown (ROLLUP)
 --
+-- Purpose:
+--   Hierarchical revenue aggregation across subscription tier,
+--   user country, and billing quarter.
+--   Produces subtotals at each level of the hierarchy plus a
+--   grand total row — a classic ROLLUP pattern.
+--
+-- OLAP feature: ROLLUP(tier_name, country_code, quarter_no)
+-- Source views: V_CONS_USER_SUBSCRIPTION, V_DIM_TIME
+--
+-- Output columns:
+--   tier_name      - subscription plan (or NULL for subtotal/grand total)
+--   country_code   - user country (or NULL for subtotal/grand total)
+--   quarter_no     - billing quarter (or NULL for subtotal/grand total)
+--   subscriber_count  - distinct users in that group
+--   total_revenue_usd - sum of monthly prices billed
+--   grouping_label    - human-readable label for the aggregation level
+-- ============================================================
+-- ============================================================
+-- ============================================================
+CREATE OR REPLACE VIEW FDBO.V_RPT_SUB_REVENUE_ROLLUP AS
+SELECT 
+    CASE GROUPING(us.tier_name)    WHEN 1 THEN '** ALL TIERS **'    ELSE us.tier_name    END AS tier_name,
+    CASE GROUPING(us.country_code) WHEN 1 THEN '** ALL COUNTRIES **' ELSE us.country_code END AS country_code,
+    CASE GROUPING(t.quarter_no)    WHEN 1 THEN '** ALL QUARTERS **'  ELSE t.quarter_no    END AS quarter_no,
+    COUNT(DISTINCT us.user_id)                        AS subscriber_count,
+    ROUND(SUM(NVL(us.monthly_price_usd, 0)), 2)       AS total_revenue_usd,
+    CASE
+        WHEN GROUPING(us.tier_name) = 1
+         AND GROUPING(us.country_code) = 1
+         AND GROUPING(t.quarter_no) = 1
+            THEN 'Grand Total'
+        WHEN GROUPING(us.country_code) = 1
+         AND GROUPING(t.quarter_no) = 1
+            THEN 'Tier Subtotal'
+        WHEN GROUPING(t.quarter_no) = 1
+            THEN 'Country Subtotal'
+        ELSE 'Detail'
+    END                                               AS grouping_label,
+    GROUPING_ID(us.tier_name, us.country_code, t.quarter_no) AS aggregation_level
+FROM FDBO.V_CONS_USER_SUBSCRIPTION us
+JOIN FDBO.V_DIM_TIME t
+    ON t.date_key = TRUNC(CAST(us.started_at AS DATE), 'DD')
+WHERE us.price_is_active = 1
+GROUP BY ROLLUP(us.tier_name, us.country_code, t.quarter_no);
+-- ============================================================
+-- ============================================================
+-- ============================================================
+-- 4 : Product Affinity Revenue Impact by Type & Seller Pairing
+--       (GROUPING SETS + RANK + SUM OVER)
+--
+-- Purpose:
+--   Analyses product co-purchase pairs to understand which
+--   affinity combinations (same/cross type, same/cross seller)
+--   drive the highest co-purchase volume, and how individual
+--   product pairs rank within their affinity category.
 
-
-
-
-
-
-
+-- OLAP features:
+--   GROUPING SETS((...detail...), (type), (seller))
+--   RANK()   OVER (PARTITION BY affinity_type_category   ORDER BY co_purchase_count DESC)
+--   SUM()    OVER (PARTITION BY affinity_seller_category ORDER BY co_purchase_count DESC
+--                  ROWS UNBOUNDED PRECEDING)  — running co-purchase total per seller pairing
+--   AVG()    OVER ()                          — global average for deviation flagging
+-- Source view: V_DIM_PRODUCT_AFFINITY_TYPE
+-- Output columns:
+--   affinity_type_category    - same_type / cross_type  (NULL on seller subtotal rows)
+--   affinity_seller_category  - same_seller / cross_seller (NULL on type subtotal rows)
+--   product_1_id / product_2_id - pair identifiers (NULL on subtotal rows)
+--   product_1_type / product_2_type
+--   pair_count                - number of distinct pairs in group
+--   total_co_purchases        - sum of co_purchase_count in group
+--   avg_co_purchases          - average per pair
+--   rank_in_type_category     - pair rank within affinity_type_category
+--   running_co_purchases      - cumulative co-purchase count (per seller category)
+--   vs_global_avg_flag        - 'above' / 'below' / 'subtotal' vs platform average
+--   grouping_label
+-- ============================================================
+-- ============================================================
+-- ============================================================
+CREATE OR REPLACE VIEW FDBO.V_RPT_PRODUCT_AFFINITY_ANALYTICS AS
+WITH affinity_base AS (
+    SELECT /*+ NO_MERGE */
+        affinity_type_category,
+        affinity_seller_category,
+        product_1_id,
+        product_2_id,
+        product_1_type,
+        product_2_type,
+        co_purchase_count
+    FROM FDBO.V_DIM_PRODUCT_AFFINITY_TYPE
+    WHERE product_1_id IS NOT NULL
+      AND product_2_id IS NOT NULL
+),
+global_avg AS (
+    SELECT AVG(co_purchase_count) AS avg_co_purchases_global
+    FROM affinity_base
+),
+grouped_set AS (
+    SELECT
+        a.affinity_type_category,
+        a.affinity_seller_category,
+        a.product_1_id,
+        a.product_2_id,
+        a.product_1_type,
+        a.product_2_type,
+        g.avg_co_purchases_global,
+        COUNT(*)                                     AS pair_count,
+        SUM(a.co_purchase_count)                     AS total_co_purchases,
+        AVG(a.co_purchase_count)                     AS avg_co_purchases_raw,
+        GROUPING(a.product_1_id)                     AS is_subtotal,
+        GROUPING(a.affinity_seller_category)         AS is_seller_sub,
+        GROUPING(a.affinity_type_category)           AS is_type_sub
+    FROM affinity_base a
+    CROSS JOIN global_avg g
+    GROUP BY GROUPING SETS (
+        (a.affinity_type_category, a.affinity_seller_category, a.product_1_id, a.product_2_id, a.product_1_type, a.product_2_type, g.avg_co_purchases_global),
+        (a.affinity_type_category, g.avg_co_purchases_global),
+        (a.affinity_seller_category, g.avg_co_purchases_global)
+    )
+)
+SELECT
+    CASE is_type_sub   WHEN 1 THEN '** ALL **' ELSE affinity_type_category   END AS affinity_type_category,
+    CASE is_seller_sub WHEN 1 THEN '** ALL **' ELSE affinity_seller_category END AS affinity_seller_category,
+    CASE is_subtotal   WHEN 1 THEN NULL         ELSE product_1_id             END AS product_1_id,
+    CASE is_subtotal   WHEN 1 THEN NULL         ELSE product_2_id             END AS product_2_id,
+    pair_count,
+    total_co_purchases,
+    ROUND(avg_co_purchases_raw, 2)                                                AS avg_co_purchases,
+    CASE is_subtotal
+        WHEN 0 THEN RANK() OVER (PARTITION BY affinity_type_category, is_subtotal ORDER BY total_co_purchases DESC)
+        ELSE NULL
+    END                                                                           AS rank_in_type_category,
+    CASE is_subtotal
+        WHEN 0 THEN SUM(total_co_purchases) OVER (
+                        PARTITION BY affinity_seller_category, is_subtotal 
+                        ORDER BY total_co_purchases DESC 
+                        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+        ELSE NULL
+    END                                                                           AS running_co_purchases,
+    CASE is_subtotal
+        WHEN 1 THEN 'subtotal'
+        ELSE CASE WHEN avg_co_purchases_raw >= avg_co_purchases_global THEN 'above_avg' ELSE 'below_avg' END
+    END                                                                           AS vs_global_avg_flag,
+    CASE
+        WHEN is_subtotal = 0   THEN 'Pair Detail'
+        WHEN is_seller_sub = 1 THEN 'Type Category Subtotal'
+        WHEN is_type_sub = 1   THEN 'Seller Category Subtotal'
+        ELSE 'Other'
+    END                                                                           AS grouping_label
+FROM grouped_set;
 -- ============================================================
 -- ============================================================
 -- ============================================================
