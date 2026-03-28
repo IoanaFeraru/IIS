@@ -141,3 +141,34 @@ LEFT JOIN FDBO.MV_MG_PRODUCTS p1
     ON p1.product_id = nb.product_1_id
 LEFT JOIN FDBO.MV_MG_PRODUCTS p2
     ON p2.product_id = nb.product_2_id;
+
+-- ============================================================
+-- 5. V_DIM_GEOGRAPHY
+-- Description:
+--    Consolidated geography dimension with platform-wide totals.
+--    Aggregates volume counts across Users, Sellers, and Orders.
+-- Can be used for:
+--    - Global footprint and market density reporting
+--    - Identifying regional imbalances (e.g., many buyers, few sellers)
+--    - Geographic performance benchmarking
+-- ============================================================
+CREATE OR REPLACE VIEW FDBO.V_DIM_GEOGRAPHY AS
+SELECT
+    country_code,
+    SUM(user_count)   AS total_users,
+    SUM(seller_count) AS total_sellers,
+    SUM(order_count)  AS total_orders
+FROM (
+    SELECT country_code AS country_code, 
+           1 AS user_count, 0 AS seller_count, 0 AS order_count
+    FROM FDBO.USERS
+    UNION ALL
+    SELECT country_code, 
+           0, 1, 0
+    FROM FDBO.EXT_SELLER_PROFILES
+    UNION ALL
+    SELECT shipping_country, 
+           0, 0, 1
+    FROM FDBO.V_PG_ORDERS
+)
+GROUP BY country_code;
