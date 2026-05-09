@@ -1,0 +1,13 @@
+org/datasource/mongodb/views/departamentscities/DepartamentsView.class
+org/datasource/SpringBootNoSQLMongoDBService.class
+org/datasource/mongodb/views/locations/DepartamentView.class
+org/datasource/mongodb/views/locations/CityView.class
+org/datasource/mongodb/MongoDataSourceConnector.class
+org/datasource/RESTViewServiceMongoDB.class
+org/datasource/mongodb/views/departamentscities/DepartamentView.class
+org/datasource/mongodb/views/locations/Cities.class
+org/datasource/mongodb/views/locations/Departaments.class
+org/datasource/mongodb/views/locations/DepartamentViewBuilder.class
+org/datasource/mongodb/views/departamentscities/DepartamentViewBuilder.class
+org/datasource/mongodb/views/locations/DepartamentsView.class
+org/datasource/mongodb/views/departamentscities/CityView.class
