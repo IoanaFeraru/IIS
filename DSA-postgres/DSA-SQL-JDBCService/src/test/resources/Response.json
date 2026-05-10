@@ -1,7 +1,0 @@
-{
-  "viewName": "CUSTOMER_VIEW_DATA",
-  "restDataServiceHttpURL": "http://localhost:8090/DSA-SQL-JDBCService/rest/customers/CustomerView",
-  "jsonViewSchema": "ARRAY<STRUCT<customerId: BIGINT, name: STRING, registrationcode: STRING>>",
-  "CREATE_VIEW_Query": "    CREATE OR REPLACE VIEW CUSTOMER_VIEW_DATA AS\n    WITH json_view AS (\n    SELECT from_json(json_raw.data,\n                     'ARRAY<STRUCT<customerId: BIGINT, name: STRING, registrationcode: STRING>>') array\n    FROM (SELECT java_method('org.spark.service.rest.QueryRESTDataService', 'getRESTDataDocument',\n        'http://localhost:8090/DSA-SQL-JDBCService/rest/customers/CustomerView')\n        as data) json_raw\n    )\n    select v.*\n    FROM json_view LATERAL VIEW explode(json_view.array) AS v\n",
-  "autoRESTViewPath": "/_sqlrest/view/CUSTOMER_VIEW_DATA"
-}

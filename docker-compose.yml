@@ -144,7 +144,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
- 
 
   # ── L5: SPRING BOOT REST ──────────────────────────────────
   # Uncomment once the Spring Boot project is created.

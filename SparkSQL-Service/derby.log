@@ -1,0 +1,26 @@
+----------------------------------------------------------------
+Sun May 10 21:05:55 EEST 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance a816c00e-019e-1311-3616-000001e04cb0 
+on database directory D:\Github\IIS\SparkSQL-Service\metastore_db with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@60e53b93 
+Loaded from file:/C:/Users/Stefan/.m2/repository/org/apache/derby/derby/10.14.2.0/derby-10.14.2.0.jar
+java.vendor=Microsoft
+java.runtime.version=17.0.19+10-LTS
+user.dir=D:\Github\IIS\SparkSQL-Service
+os.name=Windows 10
+os.arch=amd64
+os.version=10.0
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''
+----------------------------------------------------------------
+Sun May 10 21:06:01 EEST 2026:
+Booting Derby version The Apache Software Foundation - Apache Derby - 10.14.2.0 - (1828579): instance 4fe880b5-019e-1311-3616-000001e04cb0 
+on database directory memory:D:\Github\IIS\SparkSQL-Service with class loader jdk.internal.loader.ClassLoaders$AppClassLoader@60e53b93 
+Loaded from file:/C:/Users/Stefan/.m2/repository/org/apache/derby/derby/10.14.2.0/derby-10.14.2.0.jar
+java.vendor=Microsoft
+java.runtime.version=17.0.19+10-LTS
+user.dir=D:\Github\IIS\SparkSQL-Service
+os.name=Windows 10
+os.arch=amd64
+os.version=10.0
+derby.system.home=null
+Database Class Loader started - derby.database.classpath=''

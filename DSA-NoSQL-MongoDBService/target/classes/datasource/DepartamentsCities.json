@@ -1,0 +1,33 @@
+{
+   "departaments" : [ {
+         "idDepartament" : 2,
+         "departamentName" : "Neamt",
+         "departamentCode" : "NT",
+         "countryName" : "RO",
+         "cities" : [ {
+               "idCity" : 3,
+               "cityName" : "Piatra Neamt",
+               "postalCode" : "2001"
+            }, {
+               "idCity" : 4,
+               "cityName" : "Roman",
+               "postalCode" : "2002"
+            } ]
+         
+      }, {
+         "idDepartament" : 1,
+         "departamentName" : "Iasi",
+         "departamentCode" : "IS",
+         "countryName" : "RO",
+         "cities" : [ {
+               "idCity" : 1,
+               "cityName" : "Iasi",
+               "postalCode" : "1001"
+            }, {
+               "idCity" : 2,
+               "cityName" : "Pascani",
+               "postalCode" : "1002"
+            } ]
+         
+      } ]
+}
